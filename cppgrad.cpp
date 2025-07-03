@@ -13,12 +13,12 @@
 class Value
 {
     friend std::ostream &operator<<(std::ostream &os, Value const &value);
-    friend void backprop(Value&);
+    friend void backprop(Value &);
 
   public:
     Value(float data, std::string label, std::array<Value *, 2> children = {nullptr, nullptr}, std::string op = {})
         : data_{data}, grad_{0.0}, label_{std::move(label)}, children_{std::move(children)}, op_{op},
-        backwards_{[/*this*/](){ /*std::cout << "Backwards terminal: " << label_ << '\n';*/}}
+          backwards_{[/*this*/]() { /*std::cout << "Backwards terminal: " << label_ << '\n';*/ }}
     {
     }
 
@@ -34,9 +34,9 @@ class Value
         auto out = Value{this->data_ + other.data_, std::string{this->label_ + op + other.label_}, {this, &other}, op};
 
         auto backwards = [&out]() {
-            assert (out.children_[0] && out.children_[1]);
-                
-            //std::cout << "Backwards +: " << out.label_ << '\n';
+            assert(out.children_[0] && out.children_[1]);
+
+            // std::cout << "Backwards +: " << out.label_ << '\n';
 
             out.children_[0]->grad_ += out.grad_;
             out.children_[1]->grad_ += out.grad_;
@@ -57,9 +57,9 @@ class Value
         auto out = Value{this->data_ * other.data_, std::string{this->label_ + op + other.label_}, {this, &other}, op};
 
         auto backwards = [&out]() {
-            assert (out.children_[0] && out.children_[1]);
+            assert(out.children_[0] && out.children_[1]);
 
-            //std::cout << "Backwards *: " << out.label_ << '\n';
+            // std::cout << "Backwards *: " << out.label_ << '\n';
 
             out.children_[0]->grad_ += out.children_[1]->data_ * out.grad_;
             out.children_[1]->grad_ += out.children_[0]->data_ * out.grad_;
@@ -81,9 +81,9 @@ class Value
         auto out = Value{std::pow(this->data_, other), label.str(), {this, nullptr}, op};
 
         auto backwards = [this, &out, other] {
-            assert (out.children_[0]);
+            assert(out.children_[0]);
 
-            out.children_[0]->grad_ += other * std::pow(this->data_, other-1) * out.grad_;
+            out.children_[0]->grad_ += other * std::pow(this->data_, other - 1) * out.grad_;
 
             out.children_[0]->backwards();
         };
@@ -96,12 +96,13 @@ class Value
     Value tanh()
     {
         std::string op{"tanh"};
-        auto out = Value{std::tanh(this->data_), std::string{"tanh("}+this->label_+std::string{")"}, {this, nullptr}, op};
+        auto out =
+            Value{std::tanh(this->data_), std::string{"tanh("} + this->label_ + std::string{")"}, {this, nullptr}, op};
 
         auto backwards = [&out]() {
-            assert (out.children_[0]);
+            assert(out.children_[0]);
 
-            //std::cout << "Backwards tanh: " << out.label_ << '\n';
+            // std::cout << "Backwards tanh: " << out.label_ << '\n';
 
             out.children_[0]->grad_ += (1 - (out.data_ * out.data_)) * out.grad_;
 
@@ -116,12 +117,13 @@ class Value
     Value exp()
     {
         std::string op{"exp"};
-        auto out = Value{std::exp(this->data_), std::string("exp("+this->label_+std::string{")"}), {this, nullptr}, op};
+        auto out =
+            Value{std::exp(this->data_), std::string("exp(" + this->label_ + std::string{")"}), {this, nullptr}, op};
 
         auto backwards = [&out]() {
-            assert (out.children_[0]);
+            assert(out.children_[0]);
 
-            //std::cout << "Backwards exp: " << out.label_ << '\n';
+            // std::cout << "Backwards exp: " << out.label_ << '\n';
 
             out.children_[0]->grad_ += out.data_ * out.grad_;
 
@@ -131,18 +133,32 @@ class Value
         out.setBackwards(std::move(backwards));
 
         return out;
-
     }
 
-    void setBackwards(std::function<void()> func) { backwards_ = std::move(func); }
+    void setBackwards(std::function<void()> func)
+    {
+        backwards_ = std::move(func);
+    }
 
-    void backwards() { backwards_(); }
+    void backwards()
+    {
+        backwards_();
+    }
 
-    float getData() const { return data_; }
+    float getData() const
+    {
+        return data_;
+    }
 
-    void setData(float data) { data_ = data; }
+    void setData(float data)
+    {
+        data_ = data;
+    }
 
-    float getGrad() const { return grad_; }
+    float getGrad() const
+    {
+        return grad_;
+    }
 
     void resetGrad()
     {
@@ -157,11 +173,20 @@ class Value
         }
     }
 
-    void setLabel(std::string label) { label_ = std::move(label); }
+    void setLabel(std::string label)
+    {
+        label_ = std::move(label);
+    }
 
-    std::string_view getLabel() const { return label_; }
+    std::string_view getLabel() const
+    {
+        return label_;
+    }
 
-    auto &getChildren() const { return children_; }
+    auto &getChildren() const
+    {
+        return children_;
+    }
 
     std::string id() const
     {
@@ -170,9 +195,15 @@ class Value
         return ss.str();
     }
 
-    bool hasOp() const { return !op_.empty(); }
+    bool hasOp() const
+    {
+        return !op_.empty();
+    }
 
-    std::string getOp() const { return op_; }
+    std::string getOp() const
+    {
+        return op_;
+    }
 
   private:
     float data_;
@@ -337,17 +368,19 @@ int main(int argc, char *argv[])
 
     auto x1w1_plus_x2w2 = x1w1 + x2w2;
 
-    auto n = x1w1_plus_x2w2 + b; n.setLabel("n");
+    auto n = x1w1_plus_x2w2 + b;
+    n.setLabel("n");
 
-    auto o = n.tanh(); o.setLabel("o");
+    auto o = n.tanh();
+    o.setLabel("o");
 
     backprop(o);
 
     dot::draw(o, "o_graph.dot");
 
-    //float h = 0.0001;
+    // float h = 0.0001;
 
-    //float L1, L2;
+    // float L1, L2;
 
     /*
     {
