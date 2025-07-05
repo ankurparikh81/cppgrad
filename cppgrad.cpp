@@ -13,12 +13,19 @@
 class Value
 {
     friend std::ostream &operator<<(std::ostream &os, Value const &value);
+
+    friend Value operator+(Value &first, float second);
+    friend Value operator+(float first, Value &second);
+
+    friend Value operator*(Value &first, float second);
+    friend Value operator*(float first, Value &second);
+
     friend void backprop(Value &);
 
   public:
-    Value(float data, std::string label, std::array<Value *, 2> children = {nullptr, nullptr}, std::string op = {})
-        : data_{data}, grad_{0.0}, label_{std::move(label)}, children_{std::move(children)}, op_{op},
-          backwards_{[/*this*/]() { /*std::cout << "Backwards terminal: " << label_ << '\n';*/ }}
+    Value(float data = 0.0, std::string label = {}, std::array<Value *, 2> children = {nullptr, nullptr}, std::string op = {})
+        : data_{data}, grad_{0.0}, label_{label}, children_{std::move(children)}, op_{op},
+          backwards_{[/*this*/](Value& out) { /*std::cout << "Backwards terminal: " << label_ << '\n';*/ }}
     {
     }
 
@@ -33,10 +40,10 @@ class Value
 
         auto out = Value{this->data_ + other.data_, std::string{this->label_ + op + other.label_}, {this, &other}, op};
 
-        auto backwards = [&out]() {
+        auto backwards = [](Value& out) {
             assert(out.children_[0] && out.children_[1]);
 
-            // std::cout << "Backwards +: " << out.label_ << '\n';
+            //std::cout << "Backwards +: " << out.label_ << '\n';
 
             out.children_[0]->grad_ += out.grad_;
             out.children_[1]->grad_ += out.grad_;
@@ -56,10 +63,10 @@ class Value
 
         auto out = Value{this->data_ * other.data_, std::string{this->label_ + op + other.label_}, {this, &other}, op};
 
-        auto backwards = [&out]() {
+        auto backwards = [](Value& out) {
             assert(out.children_[0] && out.children_[1]);
 
-            // std::cout << "Backwards *: " << out.label_ << '\n';
+            //std::cout << "Backwards *: " << out.label_ << '\n';
 
             out.children_[0]->grad_ += out.children_[1]->data_ * out.grad_;
             out.children_[1]->grad_ += out.children_[0]->data_ * out.grad_;
@@ -76,14 +83,19 @@ class Value
     Value pow(float other)
     {
         std::string op{"pow"};
-        std::stringstream label;
-        label << "pow(" << this->label_ << "," << other << ")";
-        auto out = Value{std::pow(this->data_, other), label.str(), {this, nullptr}, op};
 
-        auto backwards = [this, &out, other] {
+        auto out = Value{std::pow(this->data_, other),
+                         std::string{op + '(' + this->label_ + ',' + std::to_string(other) + ')'},
+                         {this, nullptr},
+                         op};
+
+        //TODO: not sure if this is correct, but unused for now
+        auto backwards = [other](Value& out) {
             assert(out.children_[0]);
 
-            out.children_[0]->grad_ += other * std::pow(this->data_, other - 1) * out.grad_;
+            //std::cout << "Backwards pow(" << other << "): " << out.label_ << '\n';
+
+            out.children_[0]->grad_ += other * std::pow(out.data_, other - 1) * out.grad_;
 
             out.children_[0]->backwards();
         };
@@ -99,10 +111,10 @@ class Value
         auto out =
             Value{std::tanh(this->data_), std::string{"tanh("} + this->label_ + std::string{")"}, {this, nullptr}, op};
 
-        auto backwards = [&out]() {
+        auto backwards = [](Value& out) {
             assert(out.children_[0]);
 
-            // std::cout << "Backwards tanh: " << out.label_ << '\n';
+            //std::cout << "Backwards tanh: " << out.label_ << '\n';
 
             out.children_[0]->grad_ += (1 - (out.data_ * out.data_)) * out.grad_;
 
@@ -120,10 +132,10 @@ class Value
         auto out =
             Value{std::exp(this->data_), std::string("exp(" + this->label_ + std::string{")"}), {this, nullptr}, op};
 
-        auto backwards = [&out]() {
+        auto backwards = [](Value& out) {
             assert(out.children_[0]);
 
-            // std::cout << "Backwards exp: " << out.label_ << '\n';
+            //std::cout << "Backwards exp: " << out.label_ << '\n';
 
             out.children_[0]->grad_ += out.data_ * out.grad_;
 
@@ -135,14 +147,14 @@ class Value
         return out;
     }
 
-    void setBackwards(std::function<void()> func)
+    void setBackwards(std::function<void(Value& out)> func)
     {
         backwards_ = std::move(func);
     }
 
     void backwards()
     {
-        backwards_();
+        backwards_(*this);
     }
 
     float getData() const
@@ -209,10 +221,65 @@ class Value
     float data_;
     float grad_;
     std::array<Value *, 2> children_;
-    std::function<void()> backwards_;
+    std::function<void(Value& out)> backwards_;
     std::string label_;
     std::string op_;
 };
+
+Value operator+(Value &first, float second)
+{
+    std::string op = "+";
+    std::stringstream ss;
+    ss << op << second;
+
+    auto out =
+        Value{first.data_ + second, std::string{first.label_ + op + std::to_string(second)}, {&first, nullptr}, op};
+
+    auto backwards = [](Value& out) {
+        assert(out.children_[0]);
+
+        // std::cout << "Backwards +: " << out.label_ << '\n';
+        out.children_[0]->grad_ += out.grad_;
+
+        out.children_[0]->backwards();
+    };
+
+    out.setBackwards(std::move(backwards));
+
+    return out;
+}
+
+Value operator+(float first, Value &second)
+{
+    return second + first;
+}
+
+Value operator*(Value &first, float second)
+{
+    std::string op{'*'};
+
+    auto out =
+        Value{first.data_ * second, std::string{first.label_ + op + std::to_string(second)}, {&first, nullptr}, op};
+
+    auto backwards = [second](Value& out) {
+        assert(out.children_[0]);
+
+        // std::cout << "Backwards " << op << ": " << out.label_ << '\n';
+
+        out.children_[0]->grad_ += second * out.grad_;
+
+        out.children_[0]->backwards();
+    };
+
+    out.setBackwards(std::move(backwards));
+
+    return out;
+}
+
+Value operator*(float first, Value &second)
+{
+    return second * first;
+}
 
 std::ostream &operator<<(std::ostream &os, Value const &value)
 {
@@ -268,6 +335,40 @@ void backprop(Value &root)
     root.grad_ = 1.0;
     root.backwards();
 }
+
+template<unsigned Size>
+class Neuron
+{
+    public:
+        Neuron(float bias) : weights_{}, products_{}, sums_{}, bias_{bias, "bias"}
+        {
+            for (unsigned i = 0; i < Size; ++i)
+            {
+                weights_[i] = {0.0, "w[" + std::to_string(i) + ']'};
+            }
+        }
+
+        Value operator()(std::vector<Value>& inputs)
+        {
+            assert (inputs.size() == Size);
+
+            for (unsigned i = 0; i < Size; ++i)
+            {
+                products_[i] = weights_[i] * inputs[i]; products_[i].setLabel("products_[" + std::to_string(i) + ']');
+                sums_[i] = products_[i] + (i > 0 ? sums_[i-1] : bias_); sums_[i].setLabel("sums_[" + std::to_string(i) + ']');
+            }
+
+            auto out = sums_[Size - 1].tanh();
+
+            return out;
+        }
+
+    private:
+        std::array<Value, Size> weights_;
+        std::array<Value, Size> products_;
+        std::array<Value, Size> sums_;
+        Value bias_;
+};
 
 namespace dot
 {
@@ -353,9 +454,18 @@ void draw(const Value &root, const char *filename)
 int main(int argc, char *argv[])
 {
     // inputs
-    auto x1 = Value{2.0, "x1"};
-    auto x2 = Value{0.0, "x2"};
+    std::vector<Value> x{Value{2.0, "x0"}}; //, Value{0.0, "x2"}};
+    //auto x1 = Value{2.0, "x1"};
+    //auto x2 = Value{0.0, "x2"};
 
+    Neuron<1> n{5.0};
+
+    auto o = n(x); o.setLabel("o");
+
+    backprop(o);
+
+    dot::draw(o, "neuron_graph.dot");
+    /*
     // weights
     auto w1 = Value{-3.0, "w1"};
     auto w2 = Value{1.0, "w2"};
@@ -377,6 +487,7 @@ int main(int argc, char *argv[])
     backprop(o);
 
     dot::draw(o, "o_graph.dot");
+    */
 
     // float h = 0.0001;
 

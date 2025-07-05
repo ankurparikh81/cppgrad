@@ -4,6 +4,9 @@ TARGET=cppgrad
 
 all: $(TARGET)
 
+debug: CXXFLAGS=-std=c++20 -g -O0
+debug: $(TARGET)
+
 $(TARGET): cppgrad.o
 	$(CXX) $(CXXFLAGS) -o $(TARGET) cppgrad.o
 
